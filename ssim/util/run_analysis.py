@@ -7,10 +7,19 @@ import torch
 from util.ssim import *
 from util.utils import *
 
+drop_fractions = np.linspace(0, 1.0, 20)
+variance_levels = np.logspace(np.log10(0.0001), np.log10(0.1), num=20)
+blur_levels = np.logspace(np.log10(0.5), np.log10(6), num=20)
+pa_levels = [1, 7, 6, 5, 4, 3, 2]
+
 PA_from_base, df_images, greyscaleImages = load_images()
+reference_image_keys = df_images["base_key"].tolist()
+base_sparsities = [
+    1 - calculate_single_mask(image).mean()
+    for image in greyscaleImages
+]
 
 # 1. Pixel Dropout
-drop_fractions = np.linspace(0, 1.0, 20)
 avg_scores_drop, mean_taus_drop, mean_ps_drop, scores_drop, sensitivities_drop, df_drop = evaluate_metrics_on_distortions(
     imgs_ref=greyscaleImages,
     distort_fn="drop",
@@ -22,7 +31,6 @@ for variant, score in mean_taus_drop.items():
 
 
 # 2. Noise
-variance_levels = np.logspace(np.log10(0.0001), np.log10(0.1), num=20)
 avg_scores_noise, mean_taus_noise, mean_ps_noise, scores_noise, sensitivities_noise, df_noise = evaluate_metrics_on_distortions(
     imgs_ref=greyscaleImages,
     distort_fn="noise",
@@ -34,7 +42,6 @@ for variant, score in mean_taus_noise.items():
 
 
 # 3. Blur
-blur_levels = np.logspace(np.log10(0.5), np.log10(6), num=20)
 avg_scores_blur, mean_taus_blur, mean_ps_blur, scores_blur, sensitivities_blur, df_blur = evaluate_metrics_on_distortions(
     imgs_ref=greyscaleImages,
     distort_fn="blur",
@@ -46,7 +53,6 @@ for variant, score in mean_taus_blur.items():
 
 
 # 4. Frame Averaging (PA)
-pa_levels = [1, 7, 6, 5, 4, 3, 2]
 (
     avg_scores_pa,
     mean_taus_pa,
@@ -121,6 +127,14 @@ for name, levels, avg_s, taus, ps, scores_dict, sens_dict in distortions:
                     scores_dict.get(metric_name, {}).get(i, None)
                     for i in range(len(levels))
                 ],
+                "reference_image_keys": [
+                    reference_image_keys
+                    for _ in range(len(levels))
+                ],
+                "base_sparsities": [
+                    base_sparsities
+                    for _ in range(len(levels))
+                ],
             }
         )
         dfs.append(df_part)
@@ -153,7 +167,7 @@ for col in df_tidy.columns:
     if df_tidy[col].dtype == "object":
         df_tidy[col] = df_tidy[col].apply(clean_val)
 
-# Option A: Save to Parquet using fastparquet
-df_tidy.to_parquet("image_quality_metrics_analysis.parquet", engine="fastparquet")
+# Save the per-image lists with PyArrow's native nested-data support.
+df_tidy.to_parquet("image_quality_metrics_analysis.parquet", engine="pyarrow")
 
 df_tidy

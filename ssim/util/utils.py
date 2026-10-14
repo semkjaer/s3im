@@ -29,8 +29,8 @@ def load_images():
     uncropped_images = []
     root_dir = "./OneDrive_1_5-19-2025"
 
-    for image_path in glob.glob(
-        os.path.join(root_dir, "**/*.png"), recursive=True
+    for image_path in sorted(
+        glob.glob(os.path.join(root_dir, "**/*.png"), recursive=True)
     ):
         uncropped_images.append(imread(image_path))
 
@@ -59,11 +59,11 @@ def load_images():
             )
 
     # 2. Identify bases that have complete sequence up to PA7
-    all_files = [
+    all_files = sorted(
         f
         for f in os.listdir(output_folder)
         if os.path.isfile(os.path.join(output_folder, f))
-    ]
+    )
 
     pa7_base_list = set()
     for fname in all_files:
@@ -74,7 +74,7 @@ def load_images():
     records = []
     PA_from_base = dict()
 
-    for base_key in pa7_base_list:
+    for base_key in sorted(pa7_base_list):
         PA_from_base[base_key] = dict()
 
         # Load PA sequence

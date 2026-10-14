@@ -47,3 +47,5 @@ if ($LASTEXITCODE -eq 0) {
 
 - **Run the prepared analysis:** From the `ssim` directory with the environment activated, run `python util\run_analysis.py`. It reads PNG images under `OneDrive_1_5-19-2025\`, creates cropped grayscale images in `cropped_grayscale\`, evaluates image distortions, and writes `image_quality_metrics_analysis.parquet` in the current directory. The run may take some time (>1hr).
 - **Explore or adapt the images/notebook:** Open  `analysis.ipynb`\ in VS Code or Jupyter.
+
+The analysis Parquet file stores the reference-image ordering and base sparsities alongside per-image scores so plots can align each score with the correct image. If you have a Parquet file created by an older version, regenerate it with `python util\run_analysis.py` before running the analysis notebook.
