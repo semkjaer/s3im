@@ -1,0 +1,159 @@
+# python 3.10.8
+
+
+import numpy as np
+import pandas as pd
+import torch
+from util.ssim import *
+from util.utils import *
+
+PA_from_base, df_images, greyscaleImages = load_images()
+
+# 1. Pixel Dropout
+drop_fractions = np.linspace(0, 1.0, 20)
+avg_scores_drop, mean_taus_drop, mean_ps_drop, scores_drop, sensitivities_drop, df_drop = evaluate_metrics_on_distortions(
+    imgs_ref=greyscaleImages,
+    distort_fn="drop",
+    levels=drop_fractions
+)
+print("Pixel dropout")
+for variant, score in mean_taus_drop.items():
+    print(f"variant: {variant}, tau score: {score}")
+
+
+# 2. Noise
+variance_levels = np.logspace(np.log10(0.0001), np.log10(0.1), num=20)
+avg_scores_noise, mean_taus_noise, mean_ps_noise, scores_noise, sensitivities_noise, df_noise = evaluate_metrics_on_distortions(
+    imgs_ref=greyscaleImages,
+    distort_fn="noise",
+    levels=variance_levels
+)
+print("\nNoise:")
+for variant, score in mean_taus_noise.items():
+    print(f"variant: {variant}, tau score: {score}")
+
+
+# 3. Blur
+blur_levels = np.logspace(np.log10(0.5), np.log10(6), num=20)
+avg_scores_blur, mean_taus_blur, mean_ps_blur, scores_blur, sensitivities_blur, df_blur = evaluate_metrics_on_distortions(
+    imgs_ref=greyscaleImages,
+    distort_fn="blur",
+    levels=blur_levels
+)
+print("\nBlur:")
+for variant, score in mean_taus_blur.items():
+    print(f"variant: {variant}, tau score: {score}")
+
+
+# 4. Frame Averaging (PA)
+pa_levels = [1, 7, 6, 5, 4, 3, 2]
+(
+    avg_scores_pa,
+    mean_taus_pa,
+    mean_ps_pa,
+    scores_pa,
+    sparsities_pa,
+    df_pa
+) = evaluate_metrics_on_pa_distortions(
+    pa_from_base=PA_from_base,
+    levels=pa_levels
+)
+print("Frame Averaging (PA):")
+for variant, score in mean_taus_pa.items():
+    print(f"variant: {variant}, tau score: {score:.3f}")
+
+dfs = []
+distortions = [
+    (
+        "drop",
+        drop_fractions,
+        avg_scores_drop,
+        mean_taus_drop,
+        mean_ps_drop,
+        scores_drop,
+        sensitivities_drop,
+    ),
+    (
+        "noise",
+        variance_levels,
+        avg_scores_noise,
+        mean_taus_noise,
+        mean_ps_noise,
+        scores_noise,
+        sensitivities_noise,
+    ),
+    (
+        "blur",
+        blur_levels,
+        avg_scores_blur,
+        mean_taus_blur,
+        mean_ps_blur,
+        scores_blur,
+        sensitivities_blur,
+    ),
+    (
+        "pa",
+        pa_levels,
+        avg_scores_pa,
+        mean_taus_pa,
+        mean_ps_pa,
+        scores_pa,
+        sparsities_pa,
+    ),
+]
+
+
+for name, levels, avg_s, taus, ps, scores_dict, sens_dict in distortions:
+    for metric_name, avg_list in avg_s.items():
+        df_part = pd.DataFrame(
+            {
+                "distortion_type": name,
+                "metric_variant": metric_name,
+                "distortion_level": list(levels),
+                "avg_score": avg_list,
+                "mean_tau": taus.get(metric_name, None),
+                "mean_p": ps.get(metric_name, None),
+                "sparsity": [
+                    sens_dict.get(metric_name, {}).get(i, None)
+                    for i in range(len(levels))
+                ],
+                "per_image_scores": [
+                    scores_dict.get(metric_name, {}).get(i, None)
+                    for i in range(len(levels))
+                ],
+            }
+        )
+        dfs.append(df_part)
+
+df_tidy = pd.concat(dfs, ignore_index=True)
+
+try:
+    import torch
+
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+
+
+def clean_val(x):
+    """Recursively converts PyTorch Tensors & NumPy types into standard Python floats/lists."""
+    if HAS_TORCH and isinstance(x, torch.Tensor):
+        x = x.detach().cpu()
+        return x.item() if x.numel() == 1 else x.tolist()
+    elif isinstance(x, (np.ndarray, np.generic)):
+        return x.item() if x.size == 1 else x.tolist()
+    elif isinstance(x, list):
+        return [clean_val(v) for v in x]
+    elif isinstance(x, dict):
+        return {k: clean_val(v) for k, v in x.items()}
+    return x
+
+# Apply recursively across all object/nested columns in df_tidy
+for col in df_tidy.columns:
+    if df_tidy[col].dtype == "object":
+        df_tidy[col] = df_tidy[col].apply(clean_val)
+
+# Option A: Save to Parquet using fastparquet
+df_tidy.to_parquet("image_quality_metrics_analysis.parquet", engine="fastparquet")
+
+df_tidy
