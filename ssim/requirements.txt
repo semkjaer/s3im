@@ -16,3 +16,4 @@ seaborn==0.13.2
 pyssim==0.7.1
 ssim==0.3.0
 IQA-pytorch==0.1
+gdown==6.4.2

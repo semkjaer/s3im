@@ -24,6 +24,9 @@ An ROI-aware variant of the structural similarity index measure (SSIM), with not
 
 ## Set up (Windows PowerShell)
 
+### Download and unzip data
+
+
 Python 3.10.8 was used for the project.
 
 ```powershell
