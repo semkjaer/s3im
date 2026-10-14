@@ -1,2 +1,3 @@
 /ssim/*/
 !/ssim/util/
+*.pyc
