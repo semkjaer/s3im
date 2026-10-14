@@ -29,7 +29,7 @@ python -m pip install -r requirements.txt
 ```
 
 ### Download and unzip data
-powershell code below, also available at https://drive.google.com/file/d/1FZfBi4vRhBGA5gJghRrYqDzr9_NLfOLH/view?usp=drive_link
+powershell code below, also available at https://drive.google.com/file/d/1FZfBi4vRhBGA5gJghRrYqDzr9_NLfOLH/view?usp=drive_link (unpack in ssim folder)
 
 ```powershell
 gdown 1FZfBi4vRhBGA5gJghRrYqDzr9_NLfOLH -O dataset.zip
