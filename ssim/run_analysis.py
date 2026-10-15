@@ -1,11 +1,22 @@
 # python 3.10.8
 
 
+import argparse
+
 import numpy as np
 import pandas as pd
 import torch
 from util.ssim import *
 from util.utils import *
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--quick",
+    action="store_true",
+    help="Analyze 5 images spanning the sparsity range and 3 levels per distortion.",
+)
+args = parser.parse_args()
+quick = args.quick
 
 drop_fractions = np.linspace(0, 1.0, 20)
 variance_levels = np.logspace(np.log10(0.0001), np.log10(0.1), num=20)
@@ -13,11 +24,42 @@ blur_levels = np.logspace(np.log10(0.5), np.log10(6), num=20)
 pa_levels = [1, 7, 6, 5, 4, 3, 2]
 
 PA_from_base, df_images, greyscaleImages = load_images()
+base_sparsities = np.asarray(
+    [calculate_sparsity(image) for image in greyscaleImages],
+    dtype=float,
+)
+
+if quick:
+    sparsity_order = np.argsort(base_sparsities, kind="stable")
+    sample_positions = np.linspace(
+        0,
+        len(sparsity_order) - 1,
+        num=min(5, len(sparsity_order)),
+    ).round().astype(int)
+    selected_indices = sparsity_order[sample_positions]
+    df_images = df_images.iloc[selected_indices].reset_index(drop=True)
+    greyscaleImages = [greyscaleImages[i] for i in selected_indices]
+    base_sparsities = base_sparsities[selected_indices]
+    selected_keys = df_images["base_key"].tolist()
+    PA_from_base = {
+        key: PA_from_base[key]
+        for key in selected_keys
+    }
+
+    def representative_levels(levels):
+        positions = np.linspace(
+            0,
+            len(levels) - 1,
+            num=min(3, len(levels)),
+        ).round().astype(int)
+        return np.asarray(levels)[positions]
+
+    drop_fractions = representative_levels(drop_fractions)
+    variance_levels = representative_levels(variance_levels)
+    blur_levels = representative_levels(blur_levels)
+    pa_levels = representative_levels(pa_levels).tolist()
+
 reference_image_keys = df_images["base_key"].tolist()
-base_sparsities = [
-    1 - calculate_single_mask(image).mean()
-    for image in greyscaleImages
-]
 
 # 1. Pixel Dropout
 avg_scores_drop, mean_taus_drop, mean_ps_drop, scores_drop, sensitivities_drop, df_drop = evaluate_metrics_on_distortions(
@@ -168,6 +210,11 @@ for col in df_tidy.columns:
         df_tidy[col] = df_tidy[col].apply(clean_val)
 
 # Save the per-image lists with PyArrow's native nested-data support.
-df_tidy.to_parquet("image_quality_metrics_analysis.parquet", engine="pyarrow")
+output_path = (
+    "image_quality_metrics_analysis_quick.parquet"
+    if quick
+    else "image_quality_metrics_analysis.parquet"
+)
+df_tidy.to_parquet(output_path, engine="pyarrow")
 
 df_tidy

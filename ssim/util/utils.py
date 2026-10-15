@@ -204,6 +204,11 @@ def calculate_single_mask(img1, sensitivity=0.5, and_or="or"):
     return mask1
 
 
+def calculate_sparsity(image):
+    """Return the fraction of pixels whose value is exactly zero."""
+    return 1.0 - np.count_nonzero(image) / image.size
+
+
 def drop_pixels(img, drop_fraction=0.5, seed=42):
     """
     Randomly zeroes out a fraction of pixels from the image.
@@ -461,7 +466,7 @@ def plot_differences(diffs, title_suffix="(noise)"):
                 plt.plot(xs, a*xs+b, linestyle="--")
 
         plt.title(f"Effect of Sparsity on {label} {title_suffix}")
-        plt.xlabel("Sparsity")
+        plt.xlabel("Image sparsity (zero-pixel fraction)")
         plt.ylabel("Relative difference in score")
         plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15),
                    ncol=min(5, len(set(levels))))
@@ -1044,6 +1049,7 @@ def plot_all_six(
     diffs_noise,
     diffs_blur,
     poly_deg=2,
+    outlier_threshold=3.5,
 ):
     """
     Create a 3 x 2 figure.
@@ -1060,6 +1066,9 @@ def plot_all_six(
     Each distortion level gets:
         - scatter points
         - polynomial fit
+
+    Severe y-outliers are excluded per distortion level using the
+    modified z-score (median absolute deviation).
 
     A shared legend is placed underneath.
     """
@@ -1095,6 +1104,7 @@ def plot_all_six(
     panel_idx = 0
 
     legend_handles = {}
+    total_outliers_removed = 0
 
     # --------------------------------------------------------
     # Gather all distortion levels
@@ -1159,6 +1169,29 @@ def plot_all_six(
 
                 x_lvl = x[mask]
                 y_lvl = y[mask]
+
+                finite = np.isfinite(x_lvl) & np.isfinite(y_lvl)
+                x_lvl = x_lvl[finite]
+                y_lvl = y_lvl[finite]
+
+                if not len(y_lvl):
+                    continue
+
+                median = np.median(y_lvl)
+                mad = np.median(np.abs(y_lvl - median))
+                if mad > 0:
+                    modified_z = (
+                        0.6744897501960817
+                        * np.abs(y_lvl - median)
+                        / mad
+                    )
+                    keep = modified_z <= outlier_threshold
+                    total_outliers_removed += int(np.count_nonzero(~keep))
+                    x_lvl = x_lvl[keep]
+                    y_lvl = y_lvl[keep]
+
+                if not len(y_lvl):
+                    continue
 
                 # --------------------------------------------
                 # Scatter
@@ -1229,7 +1262,7 @@ def plot_all_six(
 
             if r == 2:
                 ax.set_xlabel(
-                    "Sparsity"
+                    "Image sparsity (zero-pixel fraction)"
                 )
 
             if c == 0:
@@ -1256,6 +1289,11 @@ def plot_all_six(
             )
 
             panel_idx += 1
+
+    print(
+        f"Removed {total_outliers_removed} severe outlier(s) "
+        f"(modified z-score > {outlier_threshold}) from the plot."
+    )
 
     # --------------------------------------------------------
     # Shared legend
